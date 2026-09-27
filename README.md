@@ -19,21 +19,22 @@ Only **0.45%** of them do (about 2,000 out of 460,000 a year), so this is a rare
 or state monitoring program can only review a short list, so what matters is **how many of the flagged prescribers
 really go on to become outliers**.
 
-## Results (test year never used for training or tuning)
+## Results (test year never used for training, tuning or calibration)
 
 | Test year: 2022 snapshot → outcomes 2023-24 | Simple rule | Logistic regression | Random forest | **XGBoost** |
 |---|---|---|---|---|
-| **Precision of a 1,000-prescriber review list** | 21% | 33% | 35% | **40%** |
-| Lift over random selection | 47x | 75x | 79x | **89x** |
-| Future outliers caught in the top 1% of scores | 44% | 40% | 50% | **52%** |
-| PR-AUC (right metric for rare events) | 0.149 | 0.159 | 0.222 | **0.243** |
-| ROC-AUC | 0.921 | 0.942 | 0.951 | 0.950 |
+| **Precision of a 1,000-prescriber review list** | 21.1% | 33.5% | 36.4% | **37.7%** (95% CI 34.3-40.4%) |
+| Lift over random selection | 47x | 75x | 82x | **84x** |
+| Future outliers caught in the top 1% of scores | 43.5% | 39.4% | 50.0% | **52.1%** (95% CI 50.0-54.3%) |
+| PR-AUC (right metric for rare events) | 0.149 | 0.159 | 0.219 | **0.233** (95% CI 0.215-0.253) |
+| ROC-AUC | 0.921 | 0.941 | 0.950 | 0.949 |
 
-- **The model nearly doubles the precision of the best simple rule** (flag whoever is closest to their specialty's
-  99th percentile): 399 of the top 1,000 flags became outliers, vs 211 for the rule.
-- **Probabilities are calibrated** (isotonic, fitted on 2021): the model predicts 0.443% on average vs 0.447% observed,
-  so a score of 25% means roughly a 1-in-4 chance.
-- Random selection would find 4-5 future outliers in 1,000 prescribers. The model finds about 400.
+- **The model beats the best simple rule by +16.6 points of precision (95% CI +12.8 to +19.7)**: 377 of its top
+  1,000 flags became outliers, vs 211 for the rule. Random selection would find 4-5.
+- **The 2021 backtest, also untouched, shows the same result**: 38.4% precision for the model vs 21.8% for the rule.
+- **Probabilities are close to calibrated** (isotonic, fitted on the 2020 tune split): the model predicts 0.41% on
+  average vs 0.45% observed on the test year (Brier 0.0038), slightly conservative.
+- Confidence intervals come from 1,000 bootstrap resamples of the test year.
 
 | | |
 |---|---|
@@ -48,8 +49,8 @@ really go on to become outliers**.
   percentile) is the strongest signal, followed by **prescribing volume**, **patient risk scores** and **specialty**.
 - **A sudden one-year jump in percentile does not always raise risk**: the model learned that some spikes fall back
   the next year (regression to the mean), which a simple threshold rule cannot do.
-- Nurse practitioners and PAs make up about half of the top-1,000 review list, matching the shift found in the
-  previous project.
+- Nurse practitioners and PAs make up 57% of the top-1,000 review list, matching the shift found in the previous
+  project.
 
 ![Review list by specialty](Image/06_review_list_by_specialty.png)
 
@@ -60,7 +61,8 @@ really go on to become outliers**.
 ```
 opioid_analytics (PostgreSQL, from the previous project)
    └── SQL/01_features.sql ──> ml.prescriber_snapshot   1.3M prescriber-years: features at year T, label = outlier in T+1 or T+2
-          └── Python/02_train_models.py ──> rule / logistic regression / random forest / XGBoost, isotonic calibration
+          └── Python/02_train_models.py ──> rule / logistic regression / random forest / XGBoost, isotonic calibration,
+                                            bootstrap confidence intervals
                  └── Python/03_model_results.ipynb ──> evaluation charts + SHAP
                         └── app/app.py (Streamlit) ──> interactive risk explorer with per-profile SHAP explanation
 ```
@@ -69,12 +71,13 @@ opioid_analytics (PostgreSQL, from the previous project)
 
 | Decision | Why |
 |---|---|
-| **Time-based split**: train on 2020, tune on 2021, test once on 2022 | A random split would let the model learn from the future. This mirrors real use: train on the past, score today. |
+| **No look-ahead**: fit on 80% of the 2020 snapshot, tune on the other 20%, backtest on 2021, test once on 2022 | Every decision (model choice, early stopping, calibration) uses outcomes up to 2022 only, exactly what would be known when scoring the 2022 snapshot. A first version tuned on 2021, whose outcome window overlapped the test window in 2023; fixing that lowered test precision from 39.9% to 37.7%, which is the number reported. |
 | **Current outliers excluded** from the population | Otherwise the model would get credit for "predicting" people who are already outliers (78% stay flagged). |
 | **Only information available at the end of year T** in the features | Year T and the change from T-1; nothing from the outcome years. |
 | **Compared against a simple rule** | An ML model must beat the obvious heuristic to be worth deploying. |
 | **Precision on a fixed review list and PR-AUC** as the main metrics | With a 0.45% base rate, accuracy and ROC-AUC look excellent for almost any model. |
-| **Calibration fitted on the validation year** | Scores can be read as probabilities and used to set review thresholds. |
+| **Calibration fitted on the tune split** | Scores can be read as probabilities and used to set review thresholds. |
+| **Bootstrap confidence intervals** | A single number hides uncertainty; the gain over the rule stays positive across all 1,000 resamples. |
 
 ### Features (19 numeric + specialty group + region)
 Opioid share of prescriptions, percentile within specialty, ratio to the specialty median and 99th percentile,
@@ -86,9 +89,13 @@ opioid claims growth, outlier last year).
 
 ## Interactive app
 
-`streamlit run app/app.py` opens a risk explorer: describe a prescriber profile (specialty, region, opioid rate now
-and a year ago, volume, patient mix) and see the **calibrated probability**, a **risk tier** (low / elevated / high,
-relative to the 0.45% average) and a **SHAP chart explaining that specific score**.
+`streamlit run app/app.py` opens **Prescribing Insights**, a four-page app (Overview, Prescriber assessment,
+Model evidence, Data & methods). On the assessment page, describe a prescriber profile (specialty, region, opioid
+rate now and a year ago, volume, patient mix) and see the **calibrated probability**, a **review priority**
+(low / elevated / high, relative to the 0.45% average) and a **SHAP chart explaining that specific score**.
+The app runs entirely from the committed model files, so it deploys to Streamlit Community Cloud without a database.
+
+![Model evidence page](Image/app_evidence.png)
 A starting profile can be passed in the address, e.g. `?group=Primary%20Care&rate=18&prev=12`.
 
 The app works on **profiles, not real prescribers**: no individual NPI is shown or stored in this repository.
@@ -104,7 +111,7 @@ The app works on **profiles, not real prescribers**: no individual NPI is shown 
 | **Training data** | CMS Medicare Part D Prescribers by Provider, 2019-2022 features; outcomes 2021-2024 |
 | **Population** | Individual prescribers with 100+ Part D claims and unsuppressed opioid counts, not currently an outlier |
 | **Label** | Becomes a peer outlier (at or above the specialty's 99th percentile and 3x its median, 50+ opioid claims) in either of the next two years |
-| **Performance (test)** | 40% precision in the top 1,000; 52% recall in the top 1%; PR-AUC 0.243; Brier 0.00375 |
+| **Performance (test)** | 37.7% precision in the top 1,000 (95% CI 34.3-40.4%); 52.1% recall in the top 1%; PR-AUC 0.233; Brier 0.0038 |
 | **Known limitations** | Medicare Part D only (mostly 65+); prescribers must stay in Medicare for both follow-up years, so people who leave are not scored; the peer definition depends on CMS specialty labels; patterns change over time, so the model should be re-validated every year |
 | **Fairness check to add** | Precision by specialty is shown above; a production version should also monitor rural/urban and regional error rates |
 
@@ -120,7 +127,7 @@ Opioid_Prescriber_Risk_Model/
 │   ├── 03_model_results.ipynb     evaluation charts and SHAP explanations
 │   ├── 04_build_app_reference.py  group-level reference values for the app
 │   └── viz_style.py
-├── app/app.py                     Streamlit risk explorer
+├── app/                           Streamlit app (app.py, assets/, requirements.txt for deployment)
 ├── models/                        XGBoost model, calibrator, metrics.json, app reference
 ├── Image/                         charts and app screenshot
 └── run_all.py

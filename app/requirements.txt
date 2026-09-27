@@ -1,0 +1,11 @@
+# Streamlit Community Cloud installs this file for app/app.py.
+# Versions are pinned to the ones the model was trained and saved with (models/early_warning_xgb.joblib).
+streamlit==1.51.0
+scikit-learn==1.7.2
+xgboost==3.4.1
+shap==0.52.0
+pandas==2.3.3
+numpy==2.3.2
+scipy==1.16.2
+plotly==6.4.0
+joblib==1.5.2

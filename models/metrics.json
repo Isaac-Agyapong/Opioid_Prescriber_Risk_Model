@@ -1,23 +1,66 @@
 {
+  "protocol": "fit/tune = 80/20 of the 2020 snapshot; 2021 backtest and 2022 test untouched",
   "splits": {
-    "train_2020": [
-      419548,
-      1778
+    "fit_2020": [
+      335638,
+      1422
     ],
-    "valid_2021": [
+    "tune_2020": [
+      83910,
+      356
+    ],
+    "backtest_2021": [
       438400,
       1964
     ],
-    "test_2022": [
+    "test": [
       462436,
       2065
     ]
   },
   "selected_model": "XGBoost",
-  "xgb_best_iteration": 514,
+  "xgb_best_iteration": 395,
   "review_list_size": 1000,
   "results": {
-    "valid": [
+    "tune_2020": [
+      {
+        "model": "Rule: closeness to peer 99th pct",
+        "pr_auc": 0.1252,
+        "roc_auc": 0.9269,
+        "precision_top_1000": 0.16,
+        "lift_top_1000": 37.7,
+        "recall_top_1pct": 0.3933,
+        "base_rate": 0.00424
+      },
+      {
+        "model": "Logistic regression",
+        "pr_auc": 0.1553,
+        "roc_auc": 0.9451,
+        "precision_top_1000": 0.161,
+        "lift_top_1000": 37.9,
+        "recall_top_1pct": 0.4185,
+        "base_rate": 0.00424
+      },
+      {
+        "model": "Random forest",
+        "pr_auc": 0.1969,
+        "roc_auc": 0.956,
+        "precision_top_1000": 0.193,
+        "lift_top_1000": 45.5,
+        "recall_top_1pct": 0.5,
+        "base_rate": 0.00424
+      },
+      {
+        "model": "XGBoost",
+        "pr_auc": 0.2204,
+        "roc_auc": 0.9575,
+        "precision_top_1000": 0.192,
+        "lift_top_1000": 45.3,
+        "recall_top_1pct": 0.5056,
+        "base_rate": 0.00424
+      }
+    ],
+    "backtest_2021": [
       {
         "model": "Rule: closeness to peer 99th pct",
         "pr_auc": 0.145,
@@ -29,29 +72,29 @@
       },
       {
         "model": "Logistic regression",
-        "pr_auc": 0.171,
-        "roc_auc": 0.9439,
-        "precision_top_1000": 0.279,
-        "lift_top_1000": 62.3,
-        "recall_top_1pct": 0.4384,
+        "pr_auc": 0.1725,
+        "roc_auc": 0.9436,
+        "precision_top_1000": 0.276,
+        "lift_top_1000": 61.6,
+        "recall_top_1pct": 0.4389,
         "base_rate": 0.00448
       },
       {
         "model": "Random forest",
-        "pr_auc": 0.2357,
-        "roc_auc": 0.9554,
-        "precision_top_1000": 0.356,
-        "lift_top_1000": 79.5,
-        "recall_top_1pct": 0.5193,
+        "pr_auc": 0.232,
+        "roc_auc": 0.9533,
+        "precision_top_1000": 0.369,
+        "lift_top_1000": 82.4,
+        "recall_top_1pct": 0.5173,
         "base_rate": 0.00448
       },
       {
         "model": "XGBoost",
-        "pr_auc": 0.2548,
-        "roc_auc": 0.953,
-        "precision_top_1000": 0.411,
-        "lift_top_1000": 91.7,
-        "recall_top_1pct": 0.5326,
+        "pr_auc": 0.2399,
+        "roc_auc": 0.9534,
+        "precision_top_1000": 0.384,
+        "lift_top_1000": 85.7,
+        "recall_top_1pct": 0.529,
         "base_rate": 0.00448
       }
     ],
@@ -68,35 +111,54 @@
       {
         "model": "Logistic regression",
         "pr_auc": 0.1587,
-        "roc_auc": 0.9415,
-        "precision_top_1000": 0.333,
-        "lift_top_1000": 74.6,
-        "recall_top_1pct": 0.3966,
+        "roc_auc": 0.9414,
+        "precision_top_1000": 0.335,
+        "lift_top_1000": 75.0,
+        "recall_top_1pct": 0.3942,
         "base_rate": 0.00447
       },
       {
         "model": "Random forest",
-        "pr_auc": 0.2221,
-        "roc_auc": 0.9505,
-        "precision_top_1000": 0.352,
-        "lift_top_1000": 78.8,
-        "recall_top_1pct": 0.4983,
+        "pr_auc": 0.2194,
+        "roc_auc": 0.9502,
+        "precision_top_1000": 0.364,
+        "lift_top_1000": 81.5,
+        "recall_top_1pct": 0.4998,
         "base_rate": 0.00447
       },
       {
         "model": "XGBoost",
-        "pr_auc": 0.2425,
-        "roc_auc": 0.9497,
-        "precision_top_1000": 0.399,
-        "lift_top_1000": 89.4,
-        "recall_top_1pct": 0.5215,
+        "pr_auc": 0.233,
+        "roc_auc": 0.9486,
+        "precision_top_1000": 0.377,
+        "lift_top_1000": 84.4,
+        "recall_top_1pct": 0.5211,
         "base_rate": 0.00447
       }
     ]
   },
   "calibration": {
-    "brier_test": 0.00375,
-    "mean_predicted": 0.00443,
+    "brier_test": 0.00378,
+    "mean_predicted": 0.0041,
     "observed_rate": 0.00447
-  }
+  },
+  "test_bootstrap_95ci": {
+    "precision_top": [
+      0.343,
+      0.404
+    ],
+    "gain_vs_rule": [
+      0.128,
+      0.197
+    ],
+    "recall_top_1pct": [
+      0.4998,
+      0.543
+    ],
+    "pr_auc": [
+      0.2149,
+      0.2531
+    ]
+  },
+  "bootstrap_resamples": 1000
 }
