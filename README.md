@@ -3,7 +3,9 @@
 **Predicting which Medicare prescribers will become opioid prescribing outliers in the next two years, using
 7.8 million real CMS Part D records and explainable machine learning (XGBoost + SHAP).**
 
-![Interactive risk explorer](Image/app_screenshot.png)
+### ▶ [Try the live app: opioid-early-warning.streamlit.app](https://opioid-early-warning.streamlit.app)
+
+[![Live app](Image/app_screenshot.png)](https://opioid-early-warning.streamlit.app)
 
 ---
 
@@ -89,7 +91,7 @@ opioid claims growth, outlier last year).
 
 ## Interactive app
 
-`streamlit run app/app.py` opens **Prescribing Insights**, a four-page app (Overview, Prescriber assessment,
+**Live:** https://opioid-early-warning.streamlit.app · locally: `streamlit run app/app.py` opens **Prescribing Insights**, a four-page app (Overview, Prescriber assessment,
 Model evidence, Data & methods). On the assessment page, describe a prescriber profile (specialty, region, opioid
 rate now and a year ago, volume, patient mix) and see the **calibrated probability**, a **review priority**
 (low / elevated / high, relative to the 0.45% average) and a **SHAP chart explaining that specific score**.
