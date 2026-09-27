@@ -175,7 +175,7 @@ def overview():
         f"Random review finds {XGB['base_rate'] * 1000:.1f} per 1,000")
     kpi(c[2], f"{XGB['recall_top_1pct']:.0%}", "Future outliers caught in the top 1%", ci("recall_top_1pct"))
     kpi(c[3], f"{METRICS['calibration']['mean_predicted']:.2%}", "Average predicted risk",
-        f"vs {METRICS['calibration']['observed_rate']:.2%} observed (isotonic calibration)")
+        f"vs {METRICS['calibration']['observed_rate']:.2%} that actually happened: predictions match reality")
     st.write("")
     left, right = st.columns([1.15, 1], gap="large")
     with left.container(border=True, key=card_key()):
@@ -191,10 +191,10 @@ def overview():
         card_head("How it works", "From public data to a review list")
         for n, (t, d) in enumerate([
                 ("Data", "7.8M CMS Part D prescriber-years (2019-2024) modelled in PostgreSQL"),
-                ("Features", "Position within specialty, trend, volume, patient mix, 23 inputs"),
-                ("Model", "XGBoost vs. a simple rule, logistic regression and random forest"),
-                ("Honest test", "Tuned on 2020 only, tested on 2022 → 2023-24, never seen before"),
-                ("Explain", "SHAP shows why each score is high or low")], 1):
+                ("Inputs", "How a prescriber compares with others in their field, recent trend, volume and patient mix"),
+                ("Model", "A machine learning model, checked against a simple rule of thumb and two other methods"),
+                ("Honest test", "Tested on newer data the model had never seen, as in real use"),
+                ("Explain", "Every score comes with the reasons behind it")], 1):
             st.markdown(f"**{n}. {t}** · <span style='color:{INK_2}'>{d}</span>", unsafe_allow_html=True)
     st.markdown('<div class="foot">Illustrative assessment · Not a clinical recommendation</div>', unsafe_allow_html=True)
 
@@ -231,7 +231,7 @@ def assessment():
             e5, e6 = st.columns(2)
             age = e5.slider("Patient average age", 30.0, 90.0, float(round(d["bene_avg_age"], 1)), 0.5)
             risk = e6.slider("Patient risk score (HCC)", 0.3, 4.0, float(round(d["bene_avg_risk_score"], 2)), 0.05)
-            was_outlier = st.toggle("Was a peer outlier last year", value=False)
+            was_outlier = st.toggle("Was already a high prescriber last year", value=False)
 
     q = np.array(g["rate_quantiles"])
     percentile = lambda r: float(np.searchsorted(q, r, side="right") - 1) / 100
@@ -265,15 +265,15 @@ def assessment():
             card_head("Assessment result", "Estimated risk based on the prescriber's profile.")
         top_r.markdown(f'<div style="text-align:right;margin-top:14px"><span class="badge" style="color:{fg};'
                        f'background:{bgc}">● {tier}</span></div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="big">{prob:.2%}</div><div class="caption">Estimated probability of becoming a '
-                    f'peer outlier within two years.</div>'
+        st.markdown(f'<div class="big">{prob:.2%}</div><div class="caption">Chance this prescriber will prescribe far more opioids '
+                    f'than others in their field within two years.</div>'
                     f'<div class="stat"><div><div class="v">{multiple:,.1f}x</div><div class="l">Baseline</div>'
                     f'<div class="d">vs. the average prescriber ({REF["base_rate"]:.2%})</div></div>'
                     f'<div><div class="v">{percentile(rate) * 100:.0f}th</div><div class="l">Percentile within specialty</div>'
                     f'<div class="d">{group}</div></div></div>', unsafe_allow_html=True)
 
     with st.container(border=True, key=card_key()):
-        card_head("Why this score", "What pushes the risk up (amber) or down (teal), from the model's SHAP values")
+        card_head("Why this score", "What pushes the risk up (amber) or down (teal)")
         sv = explainer.shap_values(X)[0]
         grouped = pd.Series(sv, index=X.columns).groupby(
             lambda c: "Specialty" if c.startswith("specialty_group") else
@@ -284,7 +284,7 @@ def assessment():
                                text=[f"{v:+.2f}" for v in top.values], textposition="auto",
                                insidetextanchor="middle", textfont=dict(size=13, color="white")))
         fig.update_layout(paper_bgcolor="white", plot_bgcolor="white", height=330, margin=dict(l=10, r=20, t=10, b=30),
-                          xaxis=dict(title="Contribution to the risk score (log-odds)", zeroline=True,
+                          xaxis=dict(title="Effect on the risk score", zeroline=True,
                                      zerolinecolor="#94A3B8", gridcolor="#EEF2F6"),
                           yaxis=dict(tickfont=dict(size=13.5)), font=dict(family="Inter", color=INK, size=13))
         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})

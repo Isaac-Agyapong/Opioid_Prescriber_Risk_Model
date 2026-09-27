@@ -1,13 +1,21 @@
 # Early Warning Machine Learning Model for High-Risk Opioid Prescribing
 
-**Predicting which Medicare prescribers will become opioid prescribing outliers in the next two years, using
-7.8 million real CMS Part D records and explainable machine learning (XGBoost + SHAP).**
+**A tool that predicts which prescribers are likely to start prescribing far more opioids than others in their field
+within the next two years, built from 7.8 million real Medicare records.**
+
+> **In short:** a health plan or state program can only review a small number of prescribers each year, so it needs to
+> know where to look first. When this tool picks 1,000 prescribers to review, about **38%** of them really do become
+> high prescribers. A simple rule of thumb gets **21%**, and picking at random gets **less than 1%**. It was tested on
+> newer data it had never seen, and every prediction comes with a plain explanation of why the prescriber was flagged.
+> A flag is a reason for a supportive review, not proof that anyone did anything wrong.
 
 ### ▶ [Try the live app: opioid-early-warning.streamlit.app](https://opioid-early-warning.streamlit.app)
 
 [![Live app](Image/app_screenshot.png)](https://opioid-early-warning.streamlit.app)
 
 ---
+
+*The sections below go into technical detail.*
 
 ## The problem
 
