@@ -1,0 +1,14 @@
+# Prescriber-level data (contains NPIs) is rebuilt from PostgreSQL by run_all.py and never committed
+Data/*.parquet
+
+# Python / Jupyter / Streamlit
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+.streamlit/secrets.toml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

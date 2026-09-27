@@ -1,0 +1,102 @@
+{
+  "splits": {
+    "train_2020": [
+      419548,
+      1778
+    ],
+    "valid_2021": [
+      438400,
+      1964
+    ],
+    "test_2022": [
+      462436,
+      2065
+    ]
+  },
+  "selected_model": "XGBoost",
+  "xgb_best_iteration": 514,
+  "review_list_size": 1000,
+  "results": {
+    "valid": [
+      {
+        "model": "Rule: closeness to peer 99th pct",
+        "pr_auc": 0.145,
+        "roc_auc": 0.9221,
+        "precision_top_1000": 0.218,
+        "lift_top_1000": 48.7,
+        "recall_top_1pct": 0.4221,
+        "base_rate": 0.00448
+      },
+      {
+        "model": "Logistic regression",
+        "pr_auc": 0.171,
+        "roc_auc": 0.9439,
+        "precision_top_1000": 0.279,
+        "lift_top_1000": 62.3,
+        "recall_top_1pct": 0.4384,
+        "base_rate": 0.00448
+      },
+      {
+        "model": "Random forest",
+        "pr_auc": 0.2357,
+        "roc_auc": 0.9554,
+        "precision_top_1000": 0.356,
+        "lift_top_1000": 79.5,
+        "recall_top_1pct": 0.5193,
+        "base_rate": 0.00448
+      },
+      {
+        "model": "XGBoost",
+        "pr_auc": 0.2548,
+        "roc_auc": 0.953,
+        "precision_top_1000": 0.411,
+        "lift_top_1000": 91.7,
+        "recall_top_1pct": 0.5326,
+        "base_rate": 0.00448
+      }
+    ],
+    "test": [
+      {
+        "model": "Rule: closeness to peer 99th pct",
+        "pr_auc": 0.1489,
+        "roc_auc": 0.9213,
+        "precision_top_1000": 0.211,
+        "lift_top_1000": 47.3,
+        "recall_top_1pct": 0.4354,
+        "base_rate": 0.00447
+      },
+      {
+        "model": "Logistic regression",
+        "pr_auc": 0.1587,
+        "roc_auc": 0.9415,
+        "precision_top_1000": 0.333,
+        "lift_top_1000": 74.6,
+        "recall_top_1pct": 0.3966,
+        "base_rate": 0.00447
+      },
+      {
+        "model": "Random forest",
+        "pr_auc": 0.2221,
+        "roc_auc": 0.9505,
+        "precision_top_1000": 0.352,
+        "lift_top_1000": 78.8,
+        "recall_top_1pct": 0.4983,
+        "base_rate": 0.00447
+      },
+      {
+        "model": "XGBoost",
+        "pr_auc": 0.2425,
+        "roc_auc": 0.9497,
+        "precision_top_1000": 0.399,
+        "lift_top_1000": 89.4,
+        "recall_top_1pct": 0.5215,
+        "base_rate": 0.00447
+      }
+    ]
+  },
+  "calibration": {
+    "brier_test": 0.00375,
+    "mean_predicted": 0.00443,
+    "observed_rate": 0.00447
+  }
+}
