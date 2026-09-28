@@ -1,13 +1,12 @@
 """
-Prescribing Insights: early-warning model for high-risk opioid prescribing (Streamlit app).
+Prescribing Early Warning: machine learning model for high-risk opioid prescribing (Streamlit app).
 
     streamlit run app/app.py
 
-Pages: Overview, Prescriber assessment (score a profile + SHAP explanation), Model evidence, Data & methods.
-Runs from the files committed in models/ and Image/, so it deploys to Streamlit Community Cloud without a database.
-Works on prescriber *profiles*; no real prescriber is shown.
+Pages: Home (review-list simulator), Try the model (example prescribers, live score, plain-language reasons),
+Evidence, About the data. Runs from the files committed in models/ and Image/, so it deploys to Streamlit Community
+Cloud without a database. Works on prescriber *profiles*; no real prescriber is shown.
 """
-import base64
 import json
 from pathlib import Path
 
@@ -19,12 +18,11 @@ import shap
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSETS = Path(__file__).resolve().parent / "assets"
-NAVY, NAVY_2, TEAL, TEAL_SOFT = "#0A1F3A", "#0F2A47", "#0E9AA7", "#E6F6F7"
-VIOLET, AMBER, INK, INK_2, BG = "#5B3FD1", "#D97706", "#0A1F3A", "#5B6B80", "#F3F6F9"
+PLUM, PLUM_2, PLUM_SOFT = "#4B1D63", "#7A2E6E", "#F3E8F6"
+AMBER, AMBER_SOFT, RED, RED_SOFT, GREEN, GREEN_SOFT = "#E8930C", "#FDF1DC", "#B42318", "#FDE8E6", "#1F7A4D", "#E3F3EA"
+INK, INK_2, MUTED, IVORY, LINE = "#241A2B", "#5E5566", "#9A92A0", "#FBF7F1", "#EDE5DA"
 
-st.set_page_config(page_title="Prescribing Insights | Early Warning Model", page_icon="💠", layout="wide",
-                   initial_sidebar_state="expanded")
+st.set_page_config(page_title="Prescribing Early Warning | ML model", page_icon="🩺", layout="wide")
 
 
 # --------------------------------------------------------------------------------------------- data
@@ -36,15 +34,11 @@ def load():
     return art, ref, metrics, shap.TreeExplainer(art["booster"])
 
 
-@st.cache_data
-def b64(path):
-    return base64.b64encode(Path(path).read_bytes()).decode()
-
-
 art, REF, METRICS, explainer = load()
 TEST = pd.DataFrame(METRICS["results"]["test"]).set_index("model")
 XGB, RULE = TEST.loc["XGBoost"], TEST.loc["Rule: closeness to peer 99th pct"]
 CI = METRICS.get("test_bootstrap_95ci", {})
+BASE = REF["base_rate"]
 NICE = {"rate_vs_peer_p99": "Rate vs. specialty 99th percentile", "peer_percentile": "Percentile within specialty",
         "rate_vs_peer_median": "Rate vs. specialty median", "opioid_rate": "Opioid share of prescriptions",
         "was_outlier_prev_year": "Was an outlier last year", "percentile_change_1y": "1-year change in percentile",
@@ -54,315 +48,358 @@ NICE = {"rate_vs_peer_p99": "Rate vs. specialty 99th percentile", "peer_percenti
         "bene_avg_risk_score": "Patient risk score", "bene_avg_age": "Patient average age",
         "opioid_claims_growth_1y": "1-year growth in opioid claims", "peer_count": "Specialty size",
         "total_beneficiaries": "Patients", "present_prev_year": "Present last year", "rural": "Rural practice"}
+PERSONAS = [
+    ("Steady family doctor", "Primary care · prescribes like most peers", "🩺",
+     dict(group="Primary Care", rate=2.5, prev=2.5, region="Midwest", rural=False)),
+    ("Surgeon near the limit", "Close to the top 1% of surgeons, stable", "🔪",
+     dict(group="Surgery & Procedural", rate=70.0, prev=66.0, region="South", rural=False)),
+    ("Nurse practitioner, rising", "Opioid share up from 30% to 45% in a year", "📈",
+     dict(group="Nurse Practitioner / PA", rate=45.0, prev=30.0, region="South", rural=True)),
+    ("Family doctor, climbing fast", "Rural, opioid share up from 11% to 17%", "⚠️",
+     dict(group="Primary Care", rate=17.0, prev=11.0, region="South", rural=True)),
+]
 
 # --------------------------------------------------------------------------------------------- style
-ICON = {  # inline SVG icons (stroke = currentColor)
-    "db": '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
-    "doc": '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>',
-    "clock": '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-    "info": '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
-    "user": '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
-}
-
 st.markdown(f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-html, body, [class*="css"], .stApp, .stMarkdown, button, input, select, textarea {{ font-family: 'Inter', sans-serif; }}
-.stApp {{ background: {BG}; }}
-header[data-testid="stHeader"] {{ background: transparent; }}
-.block-container {{ padding-top: 1.2rem; padding-bottom: 2rem; max-width: 1400px; }}
-
-/* sidebar */
-section[data-testid="stSidebar"] {{ background: linear-gradient(180deg, {NAVY} 0%, #0C2440 100%);
-    min-width: 290px !important; max-width: 290px !important; }}
-section[data-testid="stSidebar"] * {{ color: #D6E2F0; }}
-[data-testid="stSidebarNav"] a {{ border-radius: 10px; padding: 10px 12px; margin: 3px 6px; }}
-[data-testid="stSidebarNav"] a span {{ font-size: 15.5px; font-weight: 500; }}
-[data-testid="stSidebarNav"] a[aria-current="page"] {{ background: #133A57; box-shadow: inset 3px 0 0 {TEAL}; }}
-[data-testid="stSidebarNav"] a:hover {{ background: #11324E; }}
-[data-testid="stSidebarNavSeparator"] {{ display: none; }}
-.side-footer {{ position: fixed; bottom: 18px; width: 230px; border-top: 1px solid #22415F; padding-top: 14px;
-               display: flex; gap: 12px; align-items: center; }}
-.side-footer b {{ color: #FFFFFF; font-size: 15px; }} .side-footer span {{ color: #9FB4CC; font-size: 13px; }}
-
-/* hero */
-.hero {{ border-radius: 18px; padding: 30px 36px 30px 36px; color: white; margin-bottom: 18px;
-        background: url(data:image/png;base64,{b64(ASSETS / "hero.png")}) center/cover no-repeat;
-        box-shadow: 0 10px 30px rgba(10, 31, 58, .18); position: relative; }}
-.hero .crumb {{ letter-spacing: .08em; font-size: 12.5px; color: #B9D3E6; font-weight: 600; }}
-.hero h1 {{ color: white; font-size: 44px; font-weight: 800; margin: 6px 0 4px 0; line-height: 1.1; padding: 0; }}
-.hero .lead {{ font-size: 20px; color: #E8F1F8; font-weight: 500; }}
-.hero .sub {{ font-size: 15px; color: #A9C1D6; margin-top: 4px; }}
-.hero .pill {{ position: absolute; top: 24px; right: 28px; border: 1px solid #5EEAD4; border-radius: 999px;
-              padding: 6px 14px; font-size: 13px; color: #E6FFFB; background: rgba(8, 47, 60, .45); }}
-.hero .pill:before {{ content: "●"; color: #2DD4BF; margin-right: 8px; }}
-
-/* cards */
-[class*="st-key-card-"] {{ background: white !important; border-radius: 16px !important;
-    border: 1px solid #E3E9F0 !important; box-shadow: 0 4px 18px rgba(10, 31, 58, .06); padding: 18px 20px !important; }}
-.kpi {{ min-height: 118px; }}
-.strip {{ background: white; border: 1px solid #E3E9F0; border-radius: 14px; display: flex;
-          box-shadow: 0 4px 18px rgba(10, 31, 58, .05); margin-bottom: 18px; }}
-.strip div {{ flex: 1; display: flex; gap: 14px; align-items: center; justify-content: center; padding: 16px;
-              color: {INK}; font-size: 17px; font-weight: 600; }}
-.strip div + div {{ border-left: 1px solid #E3E9F0; }}
-.strip svg {{ color: {INK_2}; }}
-.card-title {{ font-size: 26px; font-weight: 800; color: {INK}; margin: 2px 0 0 0; }}
-.card-sub {{ color: {INK_2}; font-size: 15px; margin: 2px 0 10px 0; }}
-.big {{ font-size: 76px; font-weight: 800; color: {NAVY}; line-height: 1; letter-spacing: -2px; margin: 18px 0 6px 0; }}
-.caption {{ color: {INK_2}; font-size: 15px; }}
-.badge {{ display: inline-flex; gap: 8px; align-items: center; padding: 7px 16px; border-radius: 999px;
-          font-weight: 600; font-size: 15px; }}
-.stat {{ display: flex; gap: 0; margin-top: 18px; }}
-.stat > div {{ flex: 1; padding-right: 16px; }} .stat > div + div {{ border-left: 1px solid #E3E9F0; padding-left: 22px; }}
-.stat .v {{ font-size: 32px; font-weight: 800; color: {TEAL}; }}
-.stat .l {{ font-size: 15px; color: {INK}; font-weight: 600; }} .stat .d {{ font-size: 13.5px; color: {INK_2}; }}
-.interp {{ background: white; border: 1px solid #E3E9F0; border-radius: 16px; padding: 18px 22px; display: flex;
-           gap: 18px; align-items: center; box-shadow: 0 4px 18px rgba(10, 31, 58, .05); }}
-.interp .ic {{ background: {TEAL_SOFT}; color: {TEAL}; border-radius: 999px; width: 52px; height: 52px;
-               display: flex; align-items: center; justify-content: center; flex: none; }}
-.interp b {{ font-size: 19px; color: {INK}; }} .interp p {{ margin: 2px 0 0 0; color: {INK_2}; }}
-.kpi .v {{ font-size: 40px; font-weight: 800; color: {NAVY}; line-height: 1.1; }}
-.kpi .l {{ font-size: 15px; font-weight: 600; color: {INK}; }} .kpi .d {{ font-size: 13.5px; color: {INK_2}; }}
-.foot {{ text-align: right; color: #8A99AB; font-size: 12.5px; margin-top: 10px; }}
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=Manrope:wght@400;500;600;700;800&display=swap');
+.stApp *:not([data-testid="stIconMaterial"]):not(.material-symbols-rounded) {{ font-family: 'Manrope', system-ui, sans-serif; }}
+.stApp {{ background: {IVORY}; }}
+.block-container {{ padding-top: 4.6rem; padding-bottom: 3rem; max-width: 1200px; }}
+footer, [data-testid="stDecoration"] {{ display: none !important; }}
+header[data-testid="stHeader"] {{ background: {PLUM}; height: 3.6rem; box-shadow: 0 6px 20px -10px rgba(75,29,99,.6); }}
+header[data-testid="stHeader"] a, header[data-testid="stHeader"] span, header[data-testid="stHeader"] p {{ color: #F1E6F5 !important; }}
+header[data-testid="stHeader"] [aria-current="page"] {{ background: rgba(255,255,255,.14) !important; border-radius: 999px; }}
+header[data-testid="stHeader"] [aria-current="page"] span {{ color: #FFFFFF !important; font-weight: 700; }}
+[data-testid="stAppDeployButton"], [data-testid="stMainMenu"], [data-testid="stStatusWidget"] {{ display: none !important; }}
+h1, h2, h3, .serif, .h, .kpi .v, .counter .n, .plain, .plain * {{ font-family: 'Fraunces', Georgia, serif !important; letter-spacing: -.5px; }}
+.hero {{ border-radius: 26px; padding: 40px 44px; color: #fff; position: relative; overflow: hidden;
+         background: radial-gradient(circle at 85% 20%, rgba(232,147,12,.35), transparent 45%),
+                     linear-gradient(135deg, {PLUM} 0%, {PLUM_2} 100%); }}
+.hero:after {{ content: ""; position: absolute; right: -40px; top: -40px; width: 520px; height: 420px; opacity: .22;
+               background-image: radial-gradient(#fff 1.6px, transparent 1.7px); background-size: 16px 16px; }}
+.hero .tag {{ display: inline-block; background: rgba(255,255,255,.14); padding: 6px 14px; border-radius: 999px;
+              font-size: 12.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }}
+.hero h1 {{ color: #fff; font-size: 48px; line-height: 1.08; margin: 16px 0 12px 0; max-width: 700px; position: relative; z-index: 1; }}
+.hero p {{ font-size: 17px; line-height: 1.6; color: #EBDDF0; max-width: 640px; margin: 0; position: relative; z-index: 1; }}
+.hero .by {{ position: absolute; top: 34px; right: 40px; z-index: 1; background: {AMBER}; color: {INK}; font-weight: 800;
+             font-size: 13px; padding: 8px 16px; border-radius: 999px; box-shadow: 0 8px 20px -8px rgba(0,0,0,.4); }}
+.kpis {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 18px 0 6px 0; }}
+.kpi {{ background: #fff; border: 1px solid {LINE}; border-radius: 20px; padding: 20px 22px; }}
+.kpi .v {{ font-family: 'Fraunces', serif; font-size: 42px; font-weight: 800; color: {PLUM}; line-height: 1; }}
+.kpi .l {{ font-weight: 700; color: {INK}; margin-top: 8px; font-size: 15px; }}
+.kpi .d {{ color: {INK_2}; font-size: 13px; margin-top: 3px; }}
+[class*="st-key-card-"] {{ background: #fff; border: 1px solid {LINE} !important; border-radius: 22px !important;
+                           padding: 24px 26px; box-shadow: 0 14px 30px -24px rgba(36,26,43,.35); }}
+.k {{ color: {PLUM_2}; font-size: 12px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; }}
+.h {{ font-family: 'Fraunces', serif; font-size: 27px; font-weight: 700; color: {INK}; line-height: 1.2; margin: 6px 0 6px 0; }}
+.p {{ color: {INK_2}; font-size: 15px; line-height: 1.6; }}
+.grid1000 {{ display: grid; grid-template-columns: repeat(50, 1fr); gap: 3px; margin: 14px 0 10px 0; }}
+.grid1000 i {{ aspect-ratio: 1; border-radius: 3px; background: #EFE8F1; display: block; }}
+.grid1000 i.hit {{ background: {AMBER}; box-shadow: 0 0 0 1px rgba(232,147,12,.25); }}
+.counter {{ display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }}
+.counter .n {{ font-family: 'Fraunces', serif; font-size: 64px; font-weight: 800; color: {AMBER}; line-height: 1; }}
+.counter .t {{ font-size: 16px; color: {INK}; font-weight: 600; max-width: 520px; }}
+.stButton button {{ border-radius: 16px; border: 1px solid {LINE}; background: #fff; text-align: left; padding: 14px 16px;
+                    min-height: 86px; width: 100%; white-space: normal; box-shadow: 0 8px 18px -16px rgba(36,26,43,.5); }}
+.stButton button p {{ font-size: 14px; line-height: 1.35; color: {INK}; }}
+.stButton button:hover {{ border-color: {PLUM_2}; background: {PLUM_SOFT}; }}
+.reason {{ display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; margin: 8px 0; font-size: 14.5px; color: {INK}; }}
+.reason .a {{ width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; flex: none; }}
+.tier {{ display: inline-block; padding: 7px 16px; border-radius: 999px; font-weight: 800; font-size: 14px; }}
+.plain {{ font-family: 'Fraunces', serif; font-size: 22px; color: {INK}; line-height: 1.35; margin: 4px 0 8px 0; }}
+[data-testid="stSegmentedControl"] button {{ border-radius: 999px !important; font-weight: 700; }}
+.foot {{ text-align: center; color: {MUTED}; font-size: 13px; margin-top: 30px; }}
+.foot a {{ color: {PLUM_2}; font-weight: 700; text-decoration: none; }}
 </style>""", unsafe_allow_html=True)
-
-
-def hero(crumb, title, lead, sub):
-    st.markdown(f"""<div class="hero"><div class="pill">Portfolio demonstration</div>
-        <div class="crumb">HEALTHCARE ANALYTICS &nbsp;/&nbsp; {crumb.upper()}</div>
-        <h1>{title}</h1><div class="lead">{lead}</div><div class="sub">{sub}</div></div>""", unsafe_allow_html=True)
-
-
-def strip():
-    st.markdown(f"""<div class="strip"><div>{ICON['db']} CMS Medicare Part D</div>
-        <div>{ICON['doc']} 7.8M prescriber records</div><div>{ICON['clock']} Two-year horizon</div></div>""",
-                unsafe_allow_html=True)
-
-
-def card_head(title, sub):
-    st.markdown(f'<div class="card-title">{title}</div><div class="card-sub">{sub}</div>', unsafe_allow_html=True)
-
-
-def kpi(col, value, label, detail):
-    with col.container(border=True, key=card_key()):
-        st.markdown(f'<div class="kpi"><div class="v">{value}</div><div class="l">{label}</div>'
-                    f'<div class="d">{detail}</div></div>', unsafe_allow_html=True)
-
-
-def ci(key, fmt="{:.0%}"):
-    lo, hi = CI.get(key, [None, None])
-    return f"95% CI {fmt.format(lo)}–{fmt.format(hi)}" if lo is not None else ""
-
 
 _cards = [0]
 
 
-def card_key():
+def card():
     _cards[0] += 1
-    return f"card-{_cards[0]}"
+    return st.container(border=True, key=f"card-{_cards[0]}")
 
 
-# --------------------------------------------------------------------------------------------- pages
-def overview():
-    hero("Overview", "Prescribing Analytics", "Prioritize prescriber review with predictive insights.",
-         "Two-year outlook for opioid prescribing peer-outlier risk.")
-    strip()
-    c = st.columns(4, gap="medium")
-    kpi(c[0], f"{XGB['precision_top_1000']:.0%}", "Correct flags in a 1,000-prescriber review list",
-        f"vs {RULE['precision_top_1000']:.0%} for the best simple rule · {ci('precision_top')}")
-    kpi(c[1], f"{XGB['lift_top_1000']:.0f}x", "Better than random selection",
-        f"Random review finds {XGB['base_rate'] * 1000:.1f} per 1,000")
-    kpi(c[2], f"{XGB['recall_top_1pct']:.0%}", "Future outliers caught in the top 1%", ci("recall_top_1pct"))
-    kpi(c[3], f"{METRICS['calibration']['mean_predicted']:.2%}", "Average predicted risk",
-        f"vs {METRICS['calibration']['observed_rate']:.2%} that actually happened: predictions match reality")
-    st.write("")
-    left, right = st.columns([1.15, 1], gap="large")
-    with left.container(border=True, key=card_key()):
-        card_head("The question", "Early warning, not hindsight")
-        st.markdown(
-            "About 1% of Medicare prescribers are extreme opioid outliers compared with their own specialty, and "
-            "**78% of them stay outliers year after year**. Flagging them again is easy.\n\n"
-            "The harder and more useful question: **among prescribers who are not outliers today, who will become "
-            "one within two years?** Only 0.45% do (about 2,000 of 460,000 a year). A payer or state monitoring "
-            "program can only review a short list, so the model is judged on **how many of its top-ranked "
-            "prescribers really become outliers**.")
-    with right.container(border=True, key=card_key()):
-        card_head("How it works", "From public data to a review list")
-        for n, (t, d) in enumerate([
-                ("Data", "7.8M CMS Part D prescriber-years (2019-2024) modelled in PostgreSQL"),
-                ("Inputs", "How a prescriber compares with others in their field, recent trend, volume and patient mix"),
-                ("Model", "A machine learning model, checked against a simple rule of thumb and two other methods"),
-                ("Honest test", "Tested on newer data the model had never seen, as in real use"),
-                ("Explain", "Every score comes with the reasons behind it")], 1):
-            st.markdown(f"**{n}. {t}** · <span style='color:{INK_2}'>{d}</span>", unsafe_allow_html=True)
-    st.markdown('<div class="foot">Illustrative assessment · Not a clinical recommendation</div>', unsafe_allow_html=True)
+def head(k, h, p=None):
+    st.markdown(f'<div class="k">{k}</div><div class="h">{h}</div>' + (f'<div class="p">{p}</div>' if p else ""),
+                unsafe_allow_html=True)
 
 
-def assessment():
-    hero("Prescriber review", "Prescribing Analytics", "Prioritize prescriber review with predictive insights.",
-         "Two-year outlook for opioid prescribing peer-outlier risk.")
-    strip()
-    qp = st.query_params
-    groups = sorted(REF["groups"])
-    start_group = qp.get("group", "Primary Care")
-    left, right = st.columns([1, 1.05], gap="medium")
-    with left.container(border=True, key=card_key()):
-        card_head("Prescriber profile", "Set the characteristics for the prescriber to assess.")
-        group = st.selectbox("Prescriber group", groups,
-                             index=groups.index(start_group) if start_group in groups else groups.index("Primary Care"))
-        g = REF["groups"][group]
-        d = dict(g["defaults"])
-        start_rate = float(qp.get("rate", round(d["opioid_rate"], 1)))
-        c1, c2 = st.columns([1.6, 1])
-        region = c1.selectbox("Region", ["South", "West", "Midwest", "Northeast"])
-        c2.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-        rural = c2.toggle("Rural practice", value=False)
-        rate = st.slider("Opioid prescription share (%)", 0.0, 60.0, start_rate, 0.1)
-        prev_rate = st.slider("Same measure one year earlier (%)", 0.0, 60.0, float(qp.get("prev", start_rate)), 0.1)
-        with st.expander("More profile details", expanded=False):
-            total_claims = st.number_input("Total Part D claims per year", 100, 50000, int(d["total_claims"]), step=100)
-            e1, e2 = st.columns(2)
-            patients = e1.number_input("Medicare patients", 11, 5000, int(d["total_beneficiaries"]), step=10)
-            opioid_pat = e2.slider("Patients on opioids (%)", 0.0, 100.0, float(round(d["opioid_patient_share"] * 100, 1)), 0.5)
-            e3, e4 = st.columns(2)
-            days = e3.slider("Days supplied per opioid claim", 1.0, 35.0, float(round(d["days_per_opioid_claim"], 1)), 0.5)
-            la = e4.slider("Long-acting opioid share (%)", 0.0, 80.0, float(round(d["long_acting_share"] * 100, 1)), 0.5)
-            e5, e6 = st.columns(2)
-            age = e5.slider("Patient average age", 30.0, 90.0, float(round(d["bene_avg_age"], 1)), 0.5)
-            risk = e6.slider("Patient risk score (HCC)", 0.3, 4.0, float(round(d["bene_avg_risk_score"], 2)), 0.05)
-            was_outlier = st.toggle("Was already a high prescriber last year", value=False)
+def foot():
+    st.markdown('<div class="foot">Built by Isaac Agyapong · Portfolio demonstration, not a clinical tool · '
+                '<a href="https://github.com/Isaac-Agyapong/Opioid_Prescriber_Risk_Model">Code and write-up</a></div>',
+                unsafe_allow_html=True)
 
+
+# --------------------------------------------------------------------------------------------- scoring
+def score(group, rate, prev, region, rural, d, was_outlier=False):
+    g = REF["groups"][group]
     q = np.array(g["rate_quantiles"])
-    percentile = lambda r: float(np.searchsorted(q, r, side="right") - 1) / 100
-    opioid_claims, prev_claims = total_claims * rate / 100, total_claims * prev_rate / 100
+    pct = lambda r: float(np.searchsorted(q, r, side="right") - 1) / 100
+    claims = d["total_claims"]
+    opioid_claims, prev_claims = claims * rate / 100, claims * prev / 100
     row = pd.DataFrame([{
         "specialty_group": group, "census_region": region, "rural": float(rural), "peer_count": g["peer_count"],
-        "total_claims": total_claims, "opioid_claims": opioid_claims, "opioid_rate": rate,
-        "peer_percentile": percentile(rate),
+        "total_claims": claims, "opioid_claims": opioid_claims, "opioid_rate": rate, "peer_percentile": pct(rate),
         "rate_vs_peer_median": rate / g["peer_median"] if g["peer_median"] else np.nan,
-        "rate_vs_peer_p99": rate / g["peer_p99"], "long_acting_share": la / 100, "days_per_opioid_claim": days,
-        "total_beneficiaries": patients, "opioid_patient_share": opioid_pat / 100, "bene_avg_age": age,
-        "bene_avg_risk_score": risk, "present_prev_year": 1.0, "rate_change_1y": rate - prev_rate,
-        "percentile_change_1y": percentile(rate) - percentile(prev_rate),
+        "rate_vs_peer_p99": rate / g["peer_p99"], "long_acting_share": d["long_acting_share"],
+        "days_per_opioid_claim": d["days_per_opioid_claim"], "total_beneficiaries": d["total_beneficiaries"],
+        "opioid_patient_share": d["opioid_patient_share"], "bene_avg_age": d["bene_avg_age"],
+        "bene_avg_risk_score": d["bene_avg_risk_score"], "present_prev_year": 1.0, "rate_change_1y": rate - prev,
+        "percentile_change_1y": pct(rate) - pct(prev),
         "opioid_claims_growth_1y": opioid_claims / prev_claims - 1 if prev_claims else 0.0,
         "was_outlier_prev_year": float(was_outlier)}])
     X = pd.DataFrame(art["prep"].transform(row[art["categorical"] + art["numeric"]]), columns=art["features"])
     prob = float(art["calibrator"].predict([float(art["booster"].predict_proba(X)[:, 1][0])])[0])
-    multiple = prob / REF["base_rate"]
-    if rate / g["peer_p99"] >= 1 and (not g["peer_median"] or rate >= 3 * g["peer_median"]):
-        tier, fg, bgc = "Already at outlier level", "#475569", "#E2E8F0"
-    elif multiple >= 10:
-        tier, fg, bgc = "Review priority: high", "#9A3412", "#FDE7D3"
-    elif multiple >= 2:
-        tier, fg, bgc = "Review priority: elevated", "#92400E", "#FEF3C7"
+    at_outlier = rate / g["peer_p99"] >= 1 and (not g["peer_median"] or rate >= 3 * g["peer_median"])
+    return prob, X, pct(rate), pct(prev), at_outlier
+
+
+def plain_reasons(X, group, rate, prev, pct_now, pct_prev):
+    sv = pd.Series(explainer.shap_values(X)[0], index=X.columns)
+    grouped = sv.groupby(lambda c: "specialty" if c.startswith("specialty_group") else
+                         "region" if c.startswith("census_region") else c).sum()
+    level = grouped.reindex(["peer_percentile", "rate_vs_peer_p99", "rate_vs_peer_median", "opioid_rate"]).fillna(0).sum()
+    trend = grouped.reindex(["rate_change_1y", "percentile_change_1y", "opioid_claims_growth_1y"]).fillna(0).sum()
+    rest = grouped.drop([c for c in ["peer_percentile", "rate_vs_peer_p99", "rate_vs_peer_median", "opioid_rate",
+                                     "rate_change_1y", "percentile_change_1y", "opioid_claims_growth_1y"] if c in grouped])
+    items = [(level, f"Prescribes opioids more often than {pct_now:.0%} of other {group} prescribers"
+              if pct_now >= .5 else f"Prescribes opioids less often than most {group} prescribers"),
+             (trend, f"Their opioid share went {'up' if rate > prev else 'down'} by {abs(rate - prev):.1f} points in the last year"
+                     if rate != prev else "Their opioid share did not change in the last year")]
+    PLAIN = {"specialty": "Their type of practice", "region": "The region they work in", "rural": "Working in a rural area",
+             "total_claims": "How many prescriptions they write in total", "opioid_claims": "How many opioid prescriptions they write",
+             "long_acting_share": "How often they prescribe long-acting opioids", "days_per_opioid_claim": "How many days each opioid prescription lasts",
+             "total_beneficiaries": "How many Medicare patients they see", "opioid_patient_share": "The share of their patients on opioids",
+             "bene_avg_age": "The average age of their patients", "bene_avg_risk_score": "How sick their patients are",
+             "peer_count": "How many prescribers are in their field", "was_outlier_prev_year": "Whether they were an extreme prescriber last year",
+             "present_prev_year": "Whether they were active last year"}
+    for name, v in rest.items():
+        label = PLAIN.get(name, NICE.get(name, name))
+        items.append((v, label))
+    items.sort(key=lambda t: -abs(t[0]))
+    return items[:3], grouped
+
+
+# --------------------------------------------------------------------------------------------- pages
+def home():
+    st.markdown(f"""<div class="hero"><div class="by">Built by Isaac Agyapong</div>
+      <span class="tag">Machine learning · 7.8 million Medicare records</span>
+      <h1>Which prescribers will start prescribing far more opioids than their peers?</h1>
+      <p>Health plans can only review a few prescribers each year. This model looks at public Medicare data and
+      picks the prescribers most likely to become extreme opioid prescribers in the next two years, so reviewers
+      know where to look first.</p></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="kpis">
+      <div class="kpi"><div class="v">{XGB['precision_top_1000']:.0%}</div><div class="l">of the model's top 1,000 picks were right</div>
+        <div class="d">a simple rule of thumb gets {RULE['precision_top_1000']:.0%} · random picks get under 1%</div></div>
+      <div class="kpi"><div class="v">{XGB['lift_top_1000']:.0f}×</div><div class="l">better than picking at random</div>
+        <div class="d">tested on newer data the model had never seen</div></div>
+      <div class="kpi"><div class="v">{XGB['recall_top_1pct']:.0%}</div><div class="l">of future high prescribers caught</div>
+        <div class="d">by reviewing just the top 1% of the list</div></div></div>""", unsafe_allow_html=True)
+
+    with card():
+        head("Review list simulator", "A reviewer has time to check 1,000 prescribers. How many are real problems?",
+             "Each square is one prescriber on the review list. Orange squares went on to prescribe far more opioids "
+             "than others in their field within two years. Pick how the list was made:")
+        how = st.segmented_control("How the list was chosen", ["Picked at random", "Simple rule of thumb", "This model"],
+                                   default="This model", label_visibility="collapsed")
+        hits = {"Picked at random": round(XGB["base_rate"] * 1000), "Simple rule of thumb": round(RULE["precision_top_1000"] * 1000),
+                "This model": round(XGB["precision_top_1000"] * 1000)}[how or "This model"]
+        order = np.random.default_rng(7).permutation(1000)
+        hit_set = set(order[:hits])
+        cells = "".join('<i class="hit"></i>' if i in hit_set else "<i></i>" for i in range(1000))
+        note = {"Picked at random": "Almost every review is wasted.",
+                "Simple rule of thumb": "Better, but most reviews still find nothing.",
+                "This model": f"{hits / round(RULE['precision_top_1000'] * 1000):.1f} times as many as the rule of thumb, from the same number of reviews."}[how or "This model"]
+        st.markdown(f'<div class="counter"><div class="n">{hits}</div><div class="t">of 1,000 reviewed prescribers were real '
+                    f'future high prescribers. {note}</div></div><div class="grid1000">{cells}</div>',
+                    unsafe_allow_html=True)
+        st.caption("Real results from the 2022 test year: the model never saw these prescribers or their outcomes while it was being built.")
+
+    l, r = st.columns(2, gap="medium")
+    with l, card():
+        head("Why it matters", "Catch the problem before it grows",
+             "About 1 in 100 Medicare prescribers prescribes far more opioids than others in their field, and most "
+             "of them keep doing it year after year. Spotting them after the fact is easy. This model looks for the "
+             "prescribers who are <b>not</b> there yet but are heading that way, so help can come early.")
+    with r, card():
+        head("How to use it", "Try it yourself",
+             "Open <b>Try the model</b> at the top of the page, pick one of the example prescribers, and move the "
+             "sliders. The score and the reasons behind it update instantly. A flag means a friendly review, "
+             "not proof that anyone did anything wrong.")
+    foot()
+
+
+def try_model():
+    groups = sorted(REF["groups"])
+    ss = st.session_state
+    ss.setdefault("group", "Primary Care")
+    ss.setdefault("rate", 2.5)
+    ss.setdefault("prev", 2.5)
+    ss.setdefault("region", "Midwest")
+    ss.setdefault("rural", False)
+
+    def load_persona(p):
+        for k, v in p.items():
+            ss[k] = v
+
+    st.markdown(f'<div class="k" style="margin-top:6px">Try the model</div><div class="h" style="font-size:36px">'
+                'Meet the prescribers</div><div class="p">Pick an example to load it, then change anything you like. '
+                'These are made-up profiles; no real prescriber is shown.</div>', unsafe_allow_html=True)
+    cols = st.columns(4, gap="small")
+    for c, (name, desc, icon, p) in zip(cols, PERSONAS):
+        c.button(f"{icon}  **{name}**  \n{desc}", key=f"p_{name}", on_click=load_persona, args=(p,), use_container_width=True)
+    st.write("")
+
+    left, right = st.columns([1, 1.15], gap="medium")
+    with left, card():
+        head("The prescriber", "Describe who you want to check")
+        group = st.selectbox("Type of prescriber", groups, key="group")
+        g = REF["groups"][group]
+        d = dict(g["defaults"])
+        st.slider("Share of their prescriptions that are opioids", 0.0, 100.0, step=0.5, format="%.1f%%", key="rate")
+        st.slider("The same share one year earlier", 0.0, 100.0, step=0.5, format="%.1f%%", key="prev")
+        c1, c2 = st.columns([1.4, 1])
+        c1.selectbox("Region", ["South", "West", "Midwest", "Northeast"], key="region")
+        c2.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+        c2.toggle("Rural practice", key="rural")
+        med, p99 = g["peer_median"], g["peer_p99"]
+        st.markdown(f'<div class="p" style="font-size:13.5px;margin-top:6px">For {group}: a typical prescriber is at '
+                    f'<b>{med:.1f}%</b>, the top 1% start at <b>{p99:.1f}%</b>.</div>', unsafe_allow_html=True)
+
+    prob, X, pct_now, pct_prev, at_outlier = score(group, ss.rate, ss.prev, ss.region, ss.rural, d)
+    mult = prob / BASE
+    if at_outlier:
+        tier, fg, bg = "Already at the extreme level", "#475467", "#EEF0F3"
+    elif mult >= 10:
+        tier, fg, bg = "High priority for review", RED, RED_SOFT
+    elif mult >= 2:
+        tier, fg, bg = "Worth a closer look", "#9A5B00", AMBER_SOFT
     else:
-        tier, fg, bgc = "Review priority: low", "#166534", "#DCFCE7"
+        tier, fg, bg = "Low priority", GREEN, GREEN_SOFT
+    per1000 = prob * 1000
 
-    with right.container(border=True, key=card_key()):
-        top_l, top_r = st.columns([1.5, 1])
-        with top_l:
-            card_head("Assessment result", "Estimated risk based on the prescriber's profile.")
-        top_r.markdown(f'<div style="text-align:right;margin-top:14px"><span class="badge" style="color:{fg};'
-                       f'background:{bgc}">● {tier}</span></div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="big">{prob:.2%}</div><div class="caption">Chance this prescriber will prescribe far more opioids '
-                    f'than others in their field within two years.</div>'
-                    f'<div class="stat"><div><div class="v">{multiple:,.1f}x</div><div class="l">Baseline</div>'
-                    f'<div class="d">vs. the average prescriber ({REF["base_rate"]:.2%})</div></div>'
-                    f'<div><div class="v">{percentile(rate) * 100:.0f}th</div><div class="l">Percentile within specialty</div>'
-                    f'<div class="d">{group}</div></div></div>', unsafe_allow_html=True)
+    with right, card():
+        head("Model result", "")
+        st.markdown(f'<span class="tier" style="background:{bg};color:{fg}">● {tier}</span>', unsafe_allow_html=True)
+        pos = lambda m: float(np.clip((np.log10(max(m, 0.1)) + 1) / (np.log10(50) + 1), 0, 1)) * 100
+        p2, p10, here = pos(2), pos(10), pos(mult)
+        st.markdown(f"""<div style="margin:26px 0 8px 0;position:relative">
+          <div style="position:absolute;left:calc({here:.1f}% - 9px);top:-22px;font-size:18px;color:{PLUM}">▼</div>
+          <div style="display:flex;height:18px;border-radius:999px;overflow:hidden">
+            <div style="width:{p2:.1f}%;background:#9ED6B6"></div><div style="width:{p10 - p2:.1f}%;background:#F4C66E"></div>
+            <div style="flex:1;background:#EE8E84"></div></div>
+          <div style="position:relative;height:34px;font-size:12px;color:{INK_2};margin-top:6px">
+            <span style="position:absolute;left:{p2 / 2:.1f}%;transform:translateX(-50%);color:{GREEN};font-weight:700">Low</span>
+            <span style="position:absolute;left:{(p2 + p10) / 2:.1f}%;transform:translateX(-50%);color:#9A5B00;font-weight:700">Worth a look</span>
+            <span style="position:absolute;left:{(p10 + 100) / 2:.1f}%;transform:translateX(-50%);color:{RED};font-weight:700">High</span></div></div>""",
+                    unsafe_allow_html=True)
+        times = ("far below the average prescriber" if mult < 0.1 else
+                 f"{mult:.1f} times the average prescriber ({BASE * 1000:.1f} in 1,000)")
+        st.markdown(f'<div class="plain">About <b style="color:{PLUM}">{per1000:.0f} in 1,000</b> prescribers like this one '
+                    f'will prescribe far more opioids than others in their field within two years.</div>'
+                    f'<div class="p">That is {times}. Model score {prob:.2%}.</div>' if per1000 >= 1 else
+                    f'<div class="plain">Fewer than <b style="color:{PLUM}">1 in 1,000</b> prescribers like this one '
+                    f'will prescribe far more opioids than others in their field within two years.</div>'
+                    f'<div class="p">That is {times}. Model score {prob:.2%}.</div>', unsafe_allow_html=True)
 
-    with st.container(border=True, key=card_key()):
-        card_head("Why this score", "What pushes the risk up (amber) or down (teal)")
-        sv = explainer.shap_values(X)[0]
-        grouped = pd.Series(sv, index=X.columns).groupby(
-            lambda c: "Specialty" if c.startswith("specialty_group") else
-            "Region" if c.startswith("census_region") else NICE.get(c, c)).sum()
-        top = grouped.reindex(grouped.abs().sort_values(ascending=False).index[:8])[::-1]
-        fig = go.Figure(go.Bar(x=top.values, y=top.index, orientation="h",
-                               marker_color=[AMBER if v > 0 else TEAL for v in top.values],
-                               text=[f"{v:+.2f}" for v in top.values], textposition="auto",
-                               insidetextanchor="middle", textfont=dict(size=13, color="white")))
-        fig.update_layout(paper_bgcolor="white", plot_bgcolor="white", height=330, margin=dict(l=10, r=20, t=10, b=30),
-                          xaxis=dict(title="Effect on the risk score", zeroline=True,
-                                     zerolinecolor="#94A3B8", gridcolor="#EEF2F6"),
-                          yaxis=dict(tickfont=dict(size=13.5)), font=dict(family="Inter", color=INK, size=13))
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-
-    st.markdown(f"""<div class="interp"><div class="ic">{ICON['info']}</div><div><b>Interpretation</b>
-        <p>Use this score to prioritize further, supportive review (education, prescription-monitoring checks).</p>
-        <p>A prescribing outlier score does not establish inappropriate care.</p></div></div>
-        <div class="foot">Illustrative assessment · Not a clinical recommendation</div>""", unsafe_allow_html=True)
+    with card():
+        items, grouped = plain_reasons(X, group, ss.rate, ss.prev, pct_now, pct_prev)
+        head("Why", "The main reasons behind this result")
+        for v, text in items:
+            up = v > 0
+            col, soft, arrow, word = (RED, RED_SOFT, "↑", "raises the risk") if up else (GREEN, GREEN_SOFT, "↓", "lowers the risk")
+            st.markdown(f'<div class="reason" style="background:{soft}"><div class="a" style="background:#fff;color:{col}">{arrow}</div>'
+                        f'<div>{text} <span style="color:{col};font-weight:700">· {word}</span></div></div>',
+                        unsafe_allow_html=True)
+        with st.expander("See every factor the model used"):
+            show = grouped.rename(lambda c: "Specialty" if c == "specialty" else "Region" if c == "region" else NICE.get(c, c))
+            top = show.reindex(show.abs().sort_values(ascending=False).index[:10])[::-1]
+            fig = go.Figure(go.Bar(x=top.values, y=top.index, orientation="h",
+                                   marker=dict(color=[RED if v > 0 else GREEN for v in top.values], cornerradius=6)))
+            fig.update_layout(height=340, margin=dict(l=10, r=20, t=10, b=30), paper_bgcolor="rgba(0,0,0,0)",
+                              plot_bgcolor="rgba(0,0,0,0)", font=dict(family="Manrope", color=INK, size=13),
+                              xaxis=dict(title="Pushes the risk down  ←  →  pushes it up", zerolinecolor=MUTED, gridcolor=LINE))
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.markdown(f'<div class="reason" style="background:{PLUM_SOFT};margin-top:14px"><div class="a" style="background:#fff;color:{PLUM}">i</div>'
+                '<div>A high result is a reason for a <b>supportive review</b> (education, a check of the prescription '
+                'monitoring database). It is not proof of inappropriate care.</div></div>', unsafe_allow_html=True)
+    foot()
 
 
 def evidence():
-    hero("Model evidence", "Model Evidence", "How the early-warning model was tested.",
-         "Tuned on 2020 only · tested once on the 2022 snapshot (outcomes 2023-2024) · 95% bootstrap intervals.")
-    c = st.columns(4, gap="medium")
-    kpi(c[0], f"{XGB['precision_top_1000']:.0%}", "Precision, top 1,000", ci("precision_top"))
-    kpi(c[1], f"+{XGB['precision_top_1000'] - RULE['precision_top_1000']:.0%}", "Gain over the simple rule",
-        ci("gain_vs_rule"))
-    kpi(c[2], f"{XGB['recall_top_1pct']:.0%}", "Recall in the top 1%", ci("recall_top_1pct"))
-    kpi(c[3], f"{XGB['pr_auc']:.3f}", "PR-AUC", ci("pr_auc", "{:.3f}"))
-    st.write("")
-    with st.container(border=True, key=card_key()):
-        card_head("All models on the test year", "Same features and population; the rule needs no training")
-        tbl = TEST[["precision_top_1000", "lift_top_1000", "recall_top_1pct", "pr_auc", "roc_auc"]].copy()
-        tbl.index = ["Simple rule", "Logistic regression", "Random forest", "XGBoost (selected)"]
-        tbl.columns = ["Precision, top 1,000", "Lift", "Recall, top 1%", "PR-AUC", "ROC-AUC"]
-        st.dataframe(tbl.style.format({"Precision, top 1,000": "{:.1%}", "Lift": "{:.0f}x", "Recall, top 1%": "{:.1%}",
-                                       "PR-AUC": "{:.3f}", "ROC-AUC": "{:.3f}"}), width="stretch")
-        bt = pd.DataFrame(METRICS["results"].get("backtest_2021", [])).set_index("model")
-        if len(bt):
-            st.caption(f"Out-of-time backtest (2021 snapshot, also untouched): XGBoost precision in the top 1,000 = "
-                       f"{bt.loc['XGBoost', 'precision_top_1000']:.1%} vs {bt.loc['Rule: closeness to peer 99th pct', 'precision_top_1000']:.1%} for the rule.")
+    st.markdown('<div class="k" style="margin-top:6px">Evidence</div><div class="h" style="font-size:36px">'
+                'How the model was tested</div><div class="p">Built on 2020 data, then tested once on 2022 data it had never '
+                'seen, exactly as it would be used in real life. Ranges show 95% confidence from 1,000 resamples.</div>',
+                unsafe_allow_html=True)
+    lo, hi = CI.get("precision_top", [None, None])
+    st.markdown(f"""<div class="kpis">
+      <div class="kpi"><div class="v">{XGB['precision_top_1000']:.0%}</div><div class="l">correct picks in the top 1,000</div>
+        <div class="d">likely between {lo:.0%} and {hi:.0%}</div></div>
+      <div class="kpi"><div class="v">+{(XGB['precision_top_1000'] - RULE['precision_top_1000']) * 100:.0f} pts</div>
+        <div class="l">better than the simple rule</div><div class="d">{XGB['precision_top_1000']:.0%} vs {RULE['precision_top_1000']:.0%}</div></div>
+      <div class="kpi"><div class="v">{METRICS['calibration']['mean_predicted']:.2%}</div><div class="l">average predicted risk</div>
+        <div class="d">vs {METRICS['calibration']['observed_rate']:.2%} that really happened: the scores are honest</div></div></div>""",
+                unsafe_allow_html=True)
+    with card():
+        head("Four approaches, same test", "The machine learning model finds the most real cases")
+        names = {"Rule: closeness to peer 99th pct": "Simple rule of thumb", "Logistic regression": "Logistic regression",
+                 "Random forest": "Random forest", "XGBoost": "XGBoost (chosen)"}
+        t = TEST.rename(index=names).loc[list(names.values())]
+        fig = go.Figure(go.Bar(x=t.precision_top_1000 * 1000, y=t.index, orientation="h",
+                               marker=dict(color=[MUTED, "#C9B8D1", "#A98BB6", PLUM], cornerradius=8),
+                               text=[f"{v * 1000:.0f} of 1,000" for v in t.precision_top_1000], textposition="outside"))
+        fig.update_layout(height=260, margin=dict(l=10, r=40, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)",
+                          plot_bgcolor="rgba(0,0,0,0)", font=dict(family="Manrope", color=INK, size=14),
+                          xaxis=dict(visible=False, range=[0, 470]))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        with st.expander("Full results table"):
+            tbl = TEST[["precision_top_1000", "lift_top_1000", "recall_top_1pct", "pr_auc", "roc_auc"]].rename(index=names)
+            tbl.columns = ["Precision, top 1,000", "Lift", "Recall, top 1%", "PR-AUC", "ROC-AUC"]
+            st.dataframe(tbl.style.format({"Precision, top 1,000": "{:.1%}", "Lift": "{:.0f}x", "Recall, top 1%": "{:.1%}",
+                                           "PR-AUC": "{:.3f}", "ROC-AUC": "{:.3f}"}), use_container_width=True)
     img = ROOT / "Image"
-    for a, b in [("01_model_comparison", "02_capture_curve"), ("04_feature_importance", "03_calibration")]:
-        l, r = st.columns(2, gap="medium")
-        with l.container(border=True, key=card_key()):
-            st.image(str(img / f"{a}.png"), width="stretch")
-        with r.container(border=True, key=card_key()):
-            st.image(str(img / f"{b}.png"), width="stretch")
+    a, b = st.columns(2, gap="medium")
+    with a, card():
+        st.image(str(img / "02_capture_curve.png"), use_container_width=True)
+    with b, card():
+        st.image(str(img / "03_calibration.png"), use_container_width=True)
+    foot()
 
 
-def methods():
-    hero("Data & methods", "Data & Methods", "What the model sees, and what it must not be used for.",
-         "Model card for the early-warning model.")
-    l, r = st.columns(2, gap="medium")
-    with l.container(border=True, key=card_key()):
-        card_head("Data and label", "Real, public CMS data")
+def about():
+    st.markdown('<div class="k" style="margin-top:6px">About the data</div><div class="h" style="font-size:36px">'
+                'What the model sees, and what it must not be used for</div>', unsafe_allow_html=True)
+    a, b = st.columns(2, gap="medium")
+    with a, card():
+        head("Data", "Real, public Medicare data")
         st.markdown(
-            "- **Source:** CMS Medicare Part D Prescribers by Provider, 2019-2024 (7.8M prescriber-years), modelled in PostgreSQL\n"
-            "- **Population:** individual prescribers with 100+ Part D claims and unsuppressed opioid counts, **not** an outlier in year T\n"
-            "- **Label:** becomes a peer outlier (at or above the specialty's 99th percentile and 3x its median) in T+1 or T+2\n"
-            "- **Features:** information available at the end of year T only: position within specialty, one-year trend, "
-            "volume, long-acting share, days supplied, patient mix, specialty, region, rural practice")
-    with r.container(border=True, key=card_key()):
-        card_head("Evaluation protocol", "No look-ahead at any step")
+            "- **Source:** CMS Medicare Part D prescriber data, 2019-2024 (7.8 million prescriber-years), stored in PostgreSQL\n"
+            "- **Who is scored:** prescribers with 100+ Medicare prescriptions a year who are **not** extreme prescribers yet\n"
+            "- **What is predicted:** whether they reach the top 1% of their field (and 3 times its typical level) within two years\n"
+            "- **What the model looks at:** how they compare with their peers, their one-year trend, volume, patient mix, "
+            "specialty, region and rural practice")
+    with b, card():
+        head("Testing", "No peeking at the answers")
         st.markdown(
-            "- **Fit:** 80% of the 2020 snapshot · **Tune** (model choice, early stopping, calibration): the other 20%\n"
-            "- **Backtest:** 2021 snapshot, untouched · **Test:** 2022 snapshot → outcomes 2023-24, reported once\n"
-            "- **Baseline:** the best simple rule (closeness to the specialty's 99th percentile)\n"
-            "- **Metrics:** precision on a 1,000-prescriber review list, recall in the top 1%, PR-AUC, calibration; "
-            "95% bootstrap intervals (1,000 resamples)")
-    with st.container(border=True, key=card_key()):
-        card_head("Intended use and limitations", "Model card")
+            "- Built on **2020** data, checked on **2021**, and tested once on **2022** (outcomes in 2023-2024)\n"
+            "- Compared with a simple rule of thumb and two other machine learning methods\n"
+            "- Every result comes with a 95% range from 1,000 resamples\n"
+            "- Each score is explained with SHAP, a standard method for showing why a model decided what it did")
+    with card():
+        head("Use with care", "What this tool is and is not")
         st.markdown(
-            "- **Intended use:** prioritising prescribers for *supportive* review by a payer or public-health program\n"
-            "- **Not for:** penalties, network exclusion or any decision without human review; a flag is statistical, "
-            "not evidence of inappropriate care\n"
-            "- **Limitations:** Medicare Part D only (mostly 65+); prescribers must stay in Medicare for both follow-up years; "
-            "peer groups depend on CMS specialty labels; re-validate every year as patterns change\n"
-            "- **Privacy:** the app scores profiles; no individual prescriber or NPI is shown or stored\n"
-            "- **Code:** [github.com/Isaac-Agyapong/Opioid_Prescriber_Risk_Model](https://github.com/Isaac-Agyapong/Opioid_Prescriber_Risk_Model)")
+            "- **For:** helping a health plan or state program decide who to offer a supportive review first\n"
+            "- **Not for:** penalties or any decision without a person reviewing it; a flag is not evidence of wrongdoing\n"
+            "- **Limits:** Medicare Part D only (mostly people 65+); prescribers must stay in Medicare for two years; "
+            "should be re-checked every year\n"
+            "- **Privacy:** the app scores made-up profiles; no real prescriber or ID number is shown or stored")
+    foot()
 
 
-# --------------------------------------------------------------------------------------------- navigation
-st.logo(str(ASSETS / "logo.png"), size="large")
-nav = st.navigation([st.Page(overview, title="Overview", icon=":material/home:", default=True),
-                     st.Page(assessment, title="Prescriber assessment", icon=":material/person_search:"),
-                     st.Page(evidence, title="Model evidence", icon=":material/monitoring:"),
-                     st.Page(methods, title="Data & methods", icon=":material/description:")])
-st.sidebar.markdown(f"""<div class="side-footer">{ICON['user']}<div><b>Isaac Agyapong</b><br>
-    <span>Clinical Data Science</span></div></div>""", unsafe_allow_html=True)
+nav = st.navigation([st.Page(home, title="Home", icon=":material/home:", default=True),
+                     st.Page(try_model, title="Try the model", icon=":material/tune:"),
+                     st.Page(evidence, title="Evidence", icon=":material/verified:"),
+                     st.Page(about, title="About the data", icon=":material/info:")], position="top")
 nav.run()

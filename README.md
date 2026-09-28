@@ -99,14 +99,21 @@ opioid claims growth, outlier last year).
 
 ## Interactive app
 
-**Live:** https://opioid-early-warning.streamlit.app · locally: `streamlit run app/app.py` opens **Prescribing Insights**, a four-page app (Overview, Prescriber assessment,
-Model evidence, Data & methods). On the assessment page, describe a prescriber profile (specialty, region, opioid
-rate now and a year ago, volume, patient mix) and see the **calibrated probability**, a **review priority**
-(low / elevated / high, relative to the 0.45% average) and a **SHAP chart explaining that specific score**.
+**Live:** https://opioid-early-warning.streamlit.app · locally: `streamlit run app/app.py`
+
+A four-page app written for people without a statistics background:
+
+- **Home:** a review list simulator. A grid of 1,000 squares shows how many prescribers on a review list really go on
+  to become extreme prescribers when the list is picked at random (about 4), by a simple rule of thumb (211) or by
+  this model (377).
+- **Try the model:** load one of four example prescribers with one click, or describe your own. The model scores it
+  live, shows the result on a Low / Worth a look / High bar, says it in plain words ("about 179 in 1,000 prescribers
+  like this one..."), and lists the main reasons (from SHAP).
+- **Evidence** and **About the data:** how the model was tested, and what it must not be used for.
+
 The app runs entirely from the committed model files, so it deploys to Streamlit Community Cloud without a database.
 
-![Model evidence page](Image/app_evidence.png)
-A starting profile can be passed in the address, e.g. `?group=Primary%20Care&rate=18&prev=12`.
+![Try the model page](Image/app_evidence.png)
 
 The app works on **profiles, not real prescribers**: no individual NPI is shown or stored in this repository.
 
@@ -137,7 +144,7 @@ Opioid_Prescriber_Risk_Model/
 │   ├── 03_model_results.ipynb     evaluation charts and SHAP explanations
 │   ├── 04_build_app_reference.py  group-level reference values for the app
 │   └── viz_style.py
-├── app/                           Streamlit app (app.py, assets/, requirements.txt for deployment)
+├── app/                           Streamlit app (app.py, requirements.txt for deployment)
 ├── models/                        XGBoost model, calibrator, metrics.json, app reference
 ├── Image/                         charts and app screenshot
 └── run_all.py
